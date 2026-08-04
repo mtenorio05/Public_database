@@ -38,6 +38,21 @@ def save_pickle_file(file_name, save_object):
     """Save any picklable object to disk."""
     with open(file_name, "wb") as file:
         pickle.dump(save_object, file)
+        
+# A unique identifier of a pathway graph to make referencing them easier
+def graph_fingerprint(g, precision=4):
+    atm_bounds = [0] + g.atm_amounts.tolist()
+    bnd_bounds = [0] + g.bnd_amounts.tolist()
+    ang_bounds = [0] + g.ang_amounts.tolist()
+    h = hashlib.md5()
+    for i in range(len(atm_bounds) - 1):
+        species = np.sort(g.x_atm[atm_bounds[i]:atm_bounds[i+1]].argmax(dim=1).numpy())
+        bonds   = np.sort(np.round(g.x_bnd[bnd_bounds[i]:bnd_bounds[i+1]].numpy(), precision))
+        angles  = np.sort(np.round(g.x_ang[ang_bounds[i]:ang_bounds[i+1]].numpy(), precision))
+        h.update(species.tobytes())
+        h.update(bonds.tobytes())
+        h.update(angles.tobytes())
+    return h.hexdigest()
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -133,8 +148,8 @@ print("\n" + "═" * 70)
 print(" STEP 2 — Enumerating decomposition pathways and building graphs")
 print("═" * 70)
 
-binary_dict  = {'pathway': [], 'y': []}
-ternary_dict = {'pathway': [], 'y': []}
+binary_dict = {'pathway': [],'y': [],'fingerprint': []}
+ternary_dict = {'pathway': [],'y': [],'fingerprint': []}
 
 for i, pathway in enumerate(pathways):
     n_terms = len(pathway)
@@ -176,6 +191,9 @@ for i, pathway in enumerate(pathways):
                                                    use_pt=True, include_angs=True)
                             graph_data.y = torch.tensor(H_mix + y_scale)
 
+                            # Calculating the graph fingerprint for this pathway
+                            fp = graph_fingerprint(graph_data)
+                            binary_dict['fingerprint'].append(fp)
                             torch.save(graph_data, os.path.join(pathway_dirs[0], graph_data.gid + '.pt'))
                             n_valid += 1
         print(f"    -> {n_valid} valid pathway(s) found for this scheme")
